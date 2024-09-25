@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebRTC Audio Call</title>
+</head>
+<body>
+    <h2>Audio Call</h2>
+    <script>
+        const roomName = 'nk'; // Change this as needed
+        const wsUrl = `ws://${window.location.host}/ws/audio/${roomName}/`;
+        const socket = new WebSocket(wsUrl);
+
+        socket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            const message = data['message'];
+            // Handle incoming audio stream
+        };
+
+        // Setup WebRTC here
+        // e.g., getUserMedia, RTCPeerConnection, etc.
+
+        // Send audio stream over WebSocket
+        function sendAudio(data) {
+            socket.send(JSON.stringify({
+                'message': data
+            }));
+        }
+    </script>
+</body>
+</html>

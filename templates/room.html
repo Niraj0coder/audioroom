@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Call Room</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'style.css' %}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Audio Call Room: {{ room_code }}</h1>
+            <h2>Welcome, {{ user_name }}</h2>
+        </header>
+
+        <div class="call-container">
+            <div id="participants" class="participants">
+                <!-- Participant audio controls will be added here dynamically -->
+            </div>
+
+            <div class="controls">
+                <button id="mute-button" class="btn btn-primary">
+                    <i id="mute-icon" class="fas fa-microphone"></i>
+                </button>
+
+                <button id="leave-button" class="btn btn-danger">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </div>
+
+        <div id="debug-toggle">
+            <button id="toggle-debug" class="btn btn-primary">Toggle Debug Info</button>
+        </div>
+        <div id="debug-info" style="display:none;"></div>
+    </div>
+    <script>
+        const username = "{{ user_name }}";
+        const roomCode = "{{ room_code }}";
+        
+        let webSocket;
+        let localStream;
+        const peerConnections = {};
+        const configuration = {'iceServers': [{'urls': 'stun:stun.l.google.com:19302'}]};
+
+        function debugLog(message) {
+            console.log(message);
+            const debugInfo = document.getElementById('debug-info');
+            debugInfo.innerHTML += `<p>${message}</p>`;
+        }
+
+        async function init() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({audio: true});
+                debugLog('Local stream acquired successfully');
+                setupWebSocket();
+                setupEventListeners();
+            } catch (error) {
+                debugLog(`Error accessing microphone: ${error}`);
+            }
+        }
+
+        function setupWebSocket() {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/audio/${roomCode}/`;
+            webSocket = new WebSocket(wsUrl);
+
+            webSocket.onopen = () => {
+                debugLog('WebSocket connection opened');
+                sendSignal('join', {});
+            };
+
+            webSocket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                debugLog(`Received signal: ${data.action} from ${data.peer}`);
+                handleSignalingData(data);
+            };
+
+            webSocket.onclose = () => {
+                debugLog('WebSocket connection closed');
+            };
+        }
+
+        function setupEventListeners() {
+            document.getElementById('mute-button').onclick = toggleMute;
+            document.getElementById('leave-button').onclick = leaveRoom;
+            document.getElementById('toggle-debug').onclick = () => {
+                const debugInfo = document.getElementById('debug-info');
+                debugInfo.style.display = debugInfo.style.display === 'none' ? 'block' : 'none';
+            };
+        }
+
+        function sendSignal(action, message) {
+            const signalData = JSON.stringify({
+                'peer': username,
+                'action': action,
+                'message': message
+            });
+            debugLog(`Sending signal: ${action}`);
+            webSocket.send(signalData);
+        }
+
+        async function handleSignalingData(data) {
+            switch(data.action) {
+                case 'join':
+                    if (data.peer !== username) {
+                        debugLog(`New peer joined: ${data.peer}`);
+                        await createPeerConnection(data.peer);
+                        sendSignal('ready', {target: data.peer});
+                    }
+                    break;
+                case 'ready':
+                    if (data.message.target === username) {
+                        debugLog(`Received ready signal from ${data.peer}`);
+                        if (!peerConnections[data.peer]) {
+                            await createPeerConnection(data.peer);
+                        }
+                        await createOffer(data.peer);
+                    }
+                    break;
+                case 'offer':
+                    if (data.message.target === username) {
+                        debugLog(`Received offer from ${data.peer}`);
+                        await handleOffer(data.peer, data.message.offer);
+                    }
+                    break;
+                case 'answer':
+                    if (data.message.target === username) {
+                        debugLog(`Received answer from ${data.peer}`);
+                        await handleAnswer(data.peer, data.message.answer);
+                    }
+                    break;
+                case 'candidate':
+                    if (data.message.target === username) {
+                        debugLog(`Received ICE candidate from ${data.peer}`);
+                        await handleCandidate(data.peer, data.message.candidate);
+                    }
+                    break;
+                case 'leave':
+                    handlePeerLeave(data.peer);
+                    break;
+            }
+        }
+
+        async function createPeerConnection(peer) {
+            if (peerConnections[peer]) {
+                debugLog(`Peer connection for ${peer} already exists`);
+                return;
+            }
+            try {
+                const peerConnection = new RTCPeerConnection(configuration);
+                peerConnections[peer] = peerConnection;
+
+                localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, localStream);
+                });
+
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        sendSignal('candidate', {
+                            target: peer,
+                            candidate: event.candidate
+                        });
+                    }
+                };
+
+                peerConnection.ontrack = (event) => {
+                    debugLog(`Received track from ${peer}`);
+                    if (!document.getElementById(`audio-${peer}`)) {
+                        const audio = document.createElement('audio');
+                        audio.id = `audio-${peer}`;
+                        audio.autoplay = true;
+                        audio.srcObject = event.streams[0];
+                        document.getElementById('participants').appendChild(audio);
+                        debugLog(`Added audio element for ${peer}`);
+                    }
+                };
+
+                debugLog(`Created peer connection for ${peer}`);
+            } catch (error) {
+                debugLog(`Error creating peer connection for ${peer}: ${error}`);
+            }
+        }
+
+        async function createOffer(peer) {
+            const peerConnection = peerConnections[peer];
+            if (!peerConnection) {
+                debugLog(`No peer connection found for ${peer}, creating one`);
+                await createPeerConnection(peer);
+            }
+            try {
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                sendSignal('offer', {
+                    target: peer,
+                    offer: offer
+                });
+                debugLog(`Offer created and sent to ${peer}`);
+            } catch (error) {
+                debugLog(`Error creating offer for ${peer}: ${error}`);
+            }
+        }
+
+        async function handleOffer(peer, offer) {
+            if (!peerConnections[peer]) {
+                debugLog(`No peer connection found for ${peer}, creating one`);
+                await createPeerConnection(peer);
+            }
+            const peerConnection = peerConnections[peer];
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                sendSignal('answer', {
+                    target: peer,
+                    answer: answer
+                });
+                debugLog(`Answer created and sent to ${peer}`);
+            } catch (error) {
+                debugLog(`Error handling offer from ${peer}: ${error}`);
+            }
+        }
+
+        async function handleAnswer(peer, answer) {
+            const peerConnection = peerConnections[peer];
+            if (!peerConnection) {
+                debugLog(`No peer connection found for ${peer}`);
+                return;
+            }
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                debugLog(`Answer from ${peer} set as remote description`);
+            } catch (error) {
+                debugLog(`Error handling answer from ${peer}: ${error}`);
+            }
+        }
+
+        async function handleCandidate(peer, candidate) {
+            const peerConnection = peerConnections[peer];
+            if (!peerConnection) {
+                debugLog(`No peer connection found for ${peer}`);
+                return;
+            }
+            try {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                debugLog(`ICE candidate from ${peer} added successfully`);
+            } catch (error) {
+                debugLog(`Error handling ICE candidate from ${peer}: ${error}`);
+            }
+        }
+
+        function handlePeerLeave(peer) {
+            if (peerConnections[peer]) {
+                peerConnections[peer].close();
+                delete peerConnections[peer];
+            }
+            const audio = document.getElementById(`audio-${peer}`);
+            if (audio) {
+                audio.remove();
+            }
+            debugLog(`Peer ${peer} left the room`);
+        }
+
+        function toggleMute() {
+            localStream.getAudioTracks().forEach(track => {
+                track.enabled = !track.enabled;
+                const muteIcon = document.getElementById('mute-icon');
+                if (track.enabled) {
+                    muteIcon.classList.remove('fa-microphone-slash');
+                    muteIcon.classList.add('fa-microphone');
+                } else {
+                    muteIcon.classList.remove('fa-microphone');
+                    muteIcon.classList.add('fa-microphone-slash');
+                }
+            });
+
+            const muteButton = document.getElementById('mute-button');
+            muteButton.classList.toggle('btn-primary');
+            muteButton.classList.toggle('btn-danger');
+        }
+
+        function leaveRoom() {
+            sendSignal('leave', {});
+            Object.keys(peerConnections).forEach(peerUsername => {
+                peerConnections[peerUsername].close();
+                delete peerConnections[peerUsername];
+            });
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            webSocket.close();
+            window.location.href = '/';
+        }
+
+        init();
+    </script>
+</body>
+</html>

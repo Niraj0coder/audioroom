@@ -1,0 +1,155 @@
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f0f4f8;
+    color: #333;
+}
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+h1 {
+    color: #2c3e50;
+    font-size: 2.5em;
+}
+h2 {
+    color: #34495e;
+    font-size: 1.5em;
+}
+.call-container {
+    background-color: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+.controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background-color 0.3s;
+}
+.btn-primary {
+    background-color: #3498db;
+    color: white;
+}
+.btn-primary:hover {
+    background-color: #2980b9;
+}
+.btn-danger {
+    background-color: #e74c3c;
+    color: white;
+}
+.btn-danger:hover {
+    background-color: #c0392b;
+}
+.participants {
+    display: flex;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+    flex-wrap: wrap;
+}
+.participant {
+    background-color: #ecf0f1;
+    border-radius: 5px;
+    padding: 15px;
+    text-align: center;
+}
+.participant-name {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+audio {
+    width: 100%;
+    z-index: 10;
+    
+}
+#debug-toggle {
+    text-align: center;
+    margin-top: 20px;
+}
+#debug-info {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 10px;
+    margin-top: 20px;
+    font-family: monospace;
+    max-height: 200px;
+    overflow-y: auto;
+    display: none;
+}
+
+        /* Styling for the participant card */
+        .participant {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #2c2c3a; /* Dark background similar to the image */
+            border-radius: 12px;
+            padding: 20px;
+            width: 300px;
+            height: 200px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            margin: 10px;
+            position: relative;
+        }
+        
+        /* Avatar container for circular image */
+        .avatar-container {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        
+        .avatar {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        /* Participant name styling */
+        .participant-name {
+            font-size: 14px;
+            color: white;
+            font-weight: bold;
+            margin-bottom: 5px;
+            text-align: center;
+        }
+        
+        /* Audio control (You can modify width if needed) */
+        audio {
+            margin-top: 10px;
+            width: 55%;
+        }
+        audio::-webkit-media-controls-timeline {
+            display: none;
+        }
+        /* Additional styles for mute icon */
+        .mute-icon {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background-color: #ff4b4b;
+            border-radius: 50%;
+            padding: 6px;
+            color: white;
+        }
